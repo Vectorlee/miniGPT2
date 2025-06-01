@@ -1,8 +1,36 @@
+import os
 import torch
 import math
 import time
 from dataloader import DataLoaderLite
 from model import GPT, GPTConfig
+import torch.distributed as dist
+from torch.distributed import init_process_group, destroy_process_group
+from torch.nn.parallel import DistributedDataParallel as DDP
+
+# Set up DDP (Distributed Data Parallel)
+# if we set the RANK environment variable, then it is a distributed training job
+# torchrun creates these environment variables
+ddp = int(os.environ.get('RANK', -1)) != -1 
+if ddp:
+    # now we need cuda
+    assert torch.cuda.is_available(), "Need CUDA for DDP"
+    init_process_group(backend="nccl")
+
+    ddp_rank = int(os.environ['RANK'])
+    ddp_local_rank = int(os.environ['LOCAL_RANK'])
+    ddp_world_size = int(os.environ['WORLD_SIZE'])
+    device = f'cuda:{ddp_local_rank}'
+    torch.cuda.set_device(device)
+    master_process = ddp_rank == 0
+else:
+    # Vanilla
+    ddp_rank = 0
+    ddp_local_rank = 0
+    ddp_world_size = 1
+    master_process = True
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 
 torch.manual_seed(1337)
 if torch.cuda.is_available():
@@ -35,6 +63,7 @@ def configure_optimizers(model, weight_decay, learning_rate):
     param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
 
     decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
+    # do not weight decay bias, layernorm, and other less than 2 dimension weights
     nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
     optim_groups = [
         {"params": decay_params, "weight_decay": weight_decay},
@@ -50,16 +79,21 @@ def configure_optimizers(model, weight_decay, learning_rate):
     return optimizer
 
 # gradient accumulate
+# following the GPT-3 paper 0.5M batch size setting
 total_batch_size = 524288 # 2**19, in number of tokens, nice number
 B = 16 # micro batch size
 T = 1024 # sequence length
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+#device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # divisible
-assert total_batch_size % (B * T) == 0
-grad_accum_steps = total_batch_size // (B * T)
-print(f"Total desired batch size: {total_batch_size}")
-print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
+assert total_batch_size % (B * T * ddp_world_size) == 0
+grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
+
+if master_process:
+    print(f"Total desired batch size: {total_batch_size}")
+    print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
+
+torch.set_float32_matmul_precision('high')
 
 
 # Change the original 50257 token count into a nice number
@@ -67,13 +101,13 @@ print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
 config = GPTConfig(vocab_size=50304)
 model = GPT(config)
 
-#B, T = 16, 1024
 #optimizer = torch.optim.AdamW(model.parameters(), lr=6e-4, betas=(0.9, 0.95), eps=1e-8)
 optimizer = configure_optimizers(model, weight_decay=0.1, learning_rate=6e-4)
+if ddp:
+    model = DDP(model, device_id=[ddp_local_rank])
 
-with open('input.txt') as f:
-    text = f.read()
-dataloader = DataLoaderLite(B, T, text)
+# use the micro batch size in the data loader
+dataloader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size)
 
 for step in range(max_steps):
     t0 = time.time()
@@ -89,14 +123,29 @@ for step in range(max_steps):
 
         # mixed precision training
         with torch.autocast(device_type=device, dtype=torch.bfloat16):
-            logits, loss = model(x, y)
+            not_last_step = micro_step < grad_accum_steps - 1
 
-        # the micro batch lost the normalizer, so we divide the
-        loss = loss / grad_accum_steps
-        loss_accum += loss.detach()
-        # because we didn't zero the grad, the gradient will accumulate
-        loss.backward()
+            if ddp and not_last_step:
+                with model.no_sync():
+                    # no_sync context requires the forward pass also resides in the context
+                    logits, loss = model(x, y)
 
+                    # the micro batch lost the normalizer
+                    # so we divide the loss by the number of micro step count
+                    loss = loss / grad_accum_steps
+                    loss_accum += loss.detach()
+                    # because we didn't zero the grad, the gradient will accumulate
+                    loss.backward()
+            else:
+                # without the no_sync context manager here
+                logits, loss = model(x, y)
+                loss = loss / grad_accum_steps
+                loss_accum += loss.detach()
+                # For the ddp case, the gradients will be synchronized across devices
+                loss.backward()
+
+    if ddp:
+        dist.all_reduce(loss_accum, op=dist.ReduceOp.AVG)
 
     # Gradient Clipping
     # Before the optimizer.step, but after the loss.backward()
@@ -110,7 +159,12 @@ for step in range(max_steps):
     optimizer.step()
     t1 = time.time()
 
-    dt = (t1 - t0) * 1000
-    token_per_sec =  (B * T * grad_accum_steps) / (t1 - t0)
+    dt = (t1 - t0)
+    token_processed = B * T * grad_accum_steps * ddp_world_size
+    token_per_sec = token_processed / dt
     # the item() function ship the tensor back from gpu to cpu
-    print(f"step {step}, loss: {loss_accum.item()}, dt: {dt:.2f}ms, tok/sec: {token_per_sec}, norm: {norm:.4f}, lr: {lr}")
+    if master_process:
+        print(f"step {step}, loss: {loss_accum.item()}, dt: {dt * 1000:.2f}ms, tok/sec: {token_per_sec}, norm: {norm:.4f}, lr: {lr}")
+
+if ddp:
+    destroy_process_group()
