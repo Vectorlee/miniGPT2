@@ -81,7 +81,7 @@ def configure_optimizers(model, weight_decay, learning_rate):
 # gradient accumulate
 # following the GPT-3 paper 0.5M batch size setting
 total_batch_size = 524288 # 2**19, in number of tokens, nice number
-B = 16 # micro batch size
+B = 64 # micro batch size
 T = 1024 # sequence length
 #device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -90,6 +90,9 @@ assert total_batch_size % (B * T * ddp_world_size) == 0
 grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
 
 if master_process:
+    print(f"Is DDP enabled: {ddp}")
+    print(f"DDP word_size: {ddp_world_size}, DDP rank: {ddp_rank}")
+    print(f"Device using: {device}")
     print(f"Total desired batch size: {total_batch_size}")
     print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
 
@@ -100,11 +103,13 @@ torch.set_float32_matmul_precision('high')
 # Nice numbers are the numbers that can be divided by large power of 2 numbers
 config = GPTConfig(vocab_size=50304)
 model = GPT(config)
+model = model.to(device)
 
 #optimizer = torch.optim.AdamW(model.parameters(), lr=6e-4, betas=(0.9, 0.95), eps=1e-8)
 optimizer = configure_optimizers(model, weight_decay=0.1, learning_rate=6e-4)
 if ddp:
-    model = DDP(model, device_id=[ddp_local_rank])
+    model = DDP(model, device_ids=[ddp_local_rank])
+
 
 # use the micro batch size in the data loader
 dataloader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size)
