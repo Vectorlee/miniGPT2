@@ -1,5 +1,11 @@
 import torch
 import tiktoken
+import numpy as np
+
+def load_token(filename):
+    token_bytes = np.load(filename)
+    toekn_tensor = torch.tensor(token_bytes, dtype=torch.long)
+    return toekn_tensor
 
 class DataLoaderLite:
 

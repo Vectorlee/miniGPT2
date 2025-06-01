@@ -5,7 +5,7 @@ import tiktoken
 from datasets import load_dataset
 from tqdm import tqdm
 
-local_dir = "finweb_edu_10B"
+local_dir = "fineweb_edu_10B"
 remote_name = "sample-10BT"
 shard_size = int(1e8) # 100M token per shard, total of 100 shards
 
@@ -28,10 +28,7 @@ def tokenize(doc):
     return tokens_np_uint16
 
 def write_datafile(filename, tokens_np):
-    # write a numpy array of uint16 tokens to a binary file
-    with open(filename, "wb") as pfile:
-        pfile.write(tokens_np.tobytes())
-
+    np.save(filename, tokens_np)
 
 # tokenize all documents and write output shards
 nprocs = max(1, os.cpu_count() // 2)
