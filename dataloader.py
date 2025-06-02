@@ -1,6 +1,9 @@
+import os
 import torch
 import tiktoken
 import numpy as np
+
+DATA_ROOT = "fineweb_edu_10B"
 
 def load_token(filename):
     token_bytes = np.load(filename)
@@ -9,20 +12,29 @@ def load_token(filename):
 
 class DataLoaderLite:
 
-    def __init__(self, B, T, process_rank, num_processes):
+    def __init__(self, B, T, process_rank, num_processes, split):
         self.B = B
         self.T = T
         self.process_rank = process_rank
         self.num_processes = num_processes
+        assert split in ('train', 'val')
 
-        # load the data
-        with open('input.txt', 'r') as f:
-            text = f.read()
-        enc = tiktoken.get_encoding('gpt2')
-        tokens = enc.encode(text)
-        self.tokens = torch.tensor(tokens)
+        # list the file
+        data_root = DATA_ROOT
+        shards = os.listdir(data_root)
+        shards = [s for s in shards if split in s]
+        shards = sorted(shards)
+        shards = [os.path.join(data_root, s) for s in shards]
+        self.shards = shards
+        assert len(shards) > 0, f"No shards found for {split} under {data_root}"
+        print(f"Found {len(shards)} shards for split {split}")
 
-        # state
+        self.reset()
+
+
+    def reset(self):
+        self.current_shard = 0
+        self.tokens = load_token(self.shards[self.current_shard])
         self.current_position = self.B * self.T * self.process_rank
 
     def next_batch(self):
@@ -32,8 +44,11 @@ class DataLoaderLite:
         x = buf[:-1].view(B, T)
         y = buf[1:].view(B, T)
 
+        # each dataloader only picks certain parts from each shard
         self.current_position += B * T * self.num_processes
 
         if self.current_position + (B * T * self.num_processes + 1) > len(self.tokens):
+            self.current_shard = (self.current_shard + 1) % len(self.shards)
+            self.tokens = load_token(self.shards[self.current_shard])
             self.current_position = self.B * self.T * self.process_rank
         return x, y
