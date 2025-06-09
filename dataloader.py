@@ -1,7 +1,7 @@
 import os
 import torch
-import tiktoken
 import numpy as np
+import random
 
 DATA_ROOT = "fineweb_edu_10B"
 
@@ -33,7 +33,8 @@ class DataLoaderLite:
 
 
     def reset(self):
-        self.current_shard = 0
+        # set the starting shard randomly to create some randomness in data loading
+        self.current_shard = random.randint(0, len(self.shards)) % len(self.shards)
         self.tokens = load_token(self.shards[self.current_shard])
         self.current_position = self.B * self.T * self.process_rank
 

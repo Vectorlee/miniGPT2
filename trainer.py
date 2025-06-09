@@ -2,6 +2,7 @@ import os
 import torch
 import math
 import time
+import random
 from dataloader import DataLoaderLite
 from model import GPT, GPTConfig
 import torch.distributed as dist
@@ -30,7 +31,8 @@ else:
     master_process = True
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-
+# set the random seed to ensure reproducibility
+random.seed(1337)
 torch.manual_seed(1337)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
@@ -84,7 +86,7 @@ def configure_optimizers(model, weight_decay, learning_rate):
 # gradient accumulate
 # following the GPT-3 paper 0.5M batch size setting
 total_batch_size = 524288 # 2**19, in number of tokens, nice number
-B = 64 # micro batch size
+B = 32 # micro batch size
 T = 1024 # sequence length
 
 # divisible
