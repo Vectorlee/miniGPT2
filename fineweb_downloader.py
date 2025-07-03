@@ -5,7 +5,7 @@ import tiktoken
 from datasets import load_dataset
 from tqdm import tqdm
 
-local_dir = "fineweb_edu_10B"
+local_dir = "pretrain_data"
 remote_name = "sample-10BT"
 shard_size = int(1e8) # 100M token per shard, total of 100 shards
 

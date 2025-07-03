@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import random
 
-DATA_ROOT = "fineweb_edu_10B"
+DATA_ROOT = "pretrain_data"
 
 def load_token(filename):
     token_bytes = np.load(filename)

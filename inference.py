@@ -4,7 +4,7 @@ from model import GPT, GPTConfig
 import tiktoken
 
 
-ModelPath = "./model/pretrain_0616.pth"
+MODEL_FILE = "./model/pretrain_0616.pth"
 
 def generate(model, input_ids, attention_masks, temperature, steps):
 
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     model = GPT(config)
 
     # Load the state dict from the saved file
-    state_dict = torch.load(ModelPath, map_location=torch.device('cpu'))
+    state_dict = torch.load(MODEL_FILE, map_location=torch.device('cpu'))
     model.load_state_dict(strip_state_prefix(state_dict))
     model.eval()
 
