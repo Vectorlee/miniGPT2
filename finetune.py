@@ -183,8 +183,7 @@ def configure_optimizers(model, weight_decay, learning_rate):
     return optimizer
 
 
-def instruction_finetune(model, dataloader, batch_size, learning_rate, epoch):
-    device = model.device
+def instruction_finetune(model, device, dataloader, batch_size, learning_rate, epoch):
     finetune_steps = dataloader.training_data_size() / batch_size * epoch
     print(f"Finetuning steps: {finetune_steps}")
 
@@ -272,7 +271,8 @@ def training_loop():
     # instrunction finetuning
     instruction_finetune(
         model, 
-        dataloader, 
+        device,
+        dataloader,
         batch_size, 
         learning_rate, 
         epoch
