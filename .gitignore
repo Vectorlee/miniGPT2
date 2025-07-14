@@ -3,3 +3,5 @@ __pycache__
 model/*
 pretrain_data/*
 !pretrain_data/*.py
+finetune_data/*
+!finetune_data/*.py
