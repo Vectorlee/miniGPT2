@@ -143,7 +143,7 @@ for step in range(max_steps):
     # checkpoint model
     if step % 1000 == 0 or step == max_steps - 1:
         if master_process:
-            torch.save(model.state_dict(), os.path.join(model_dir, f"model_{step}.path"))
+            torch.save(model.state_dict(), os.path.join(model_dir, f"model_{step}.pth"))
 
     # validation loop
     if step % 100 == 0 or step == max_steps - 1:

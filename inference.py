@@ -1,10 +1,10 @@
 import torch
 from torch.nn import functional as F
 from model import GPT, GPTConfig
+from util import strip_state_prefix
 import tiktoken
 
-
-MODEL_FILE = "./model/pretrain_0616.pth"
+MODEL_FILE = "./model/pretrain.pth"
 
 def generate(model, input_ids, attention_masks, temperature, steps):
 
@@ -46,17 +46,6 @@ def generate(model, input_ids, attention_masks, temperature, steps):
     #print(input_ids)
     #print(attention_masks)
     return input_ids, attention_masks
-
-
-def strip_state_prefix(state_dict, prefix="_orig_mod.module."):
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if k.startswith(prefix):
-            new_key = k[len(prefix):]
-        else:
-            new_key = k
-        new_state_dict[new_key] = v
-    return new_state_dict
 
 
 def get_padding_batch_tensor(token_batch):

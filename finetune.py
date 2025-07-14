@@ -6,10 +6,10 @@ import random
 import pandas as pd
 import numpy as np
 import time
+import os
 from model import GPT, GPTConfig
+from util import strip_state_prefix
 
-SFT_DATA_FILE = "./finetune_data/alpaca.parquet"
-MODEL_FILE = "./model/pretrain_0616.pth"
 
 # set the random seed to ensure reproducibility
 random.seed(1337)
@@ -18,8 +18,8 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
 
 
-def load_tokens():
-    df = pd.read_parquet(SFT_DATA_FILE)
+def load_tokens(sft_data_file):
+    df = pd.read_parquet(sft_data_file)
     enc = tiktoken.get_encoding("gpt2")
     eot = enc._special_tokens['<|endoftext|>']
 
@@ -63,9 +63,9 @@ def pad_finetune_batch(data_list):
 
 class DataLoadeFinetune:
 
-    def __init__(self, validation_size=1000):
+    def __init__(self, sft_data_file, validation_size=1000):
         # load the file
-        token_list = load_tokens()
+        token_list = load_tokens(sft_data_file)
 
         # reserve the same constant part for validation test
         self.val_data = token_list[:validation_size]
@@ -184,7 +184,7 @@ def configure_optimizers(model, weight_decay, learning_rate):
 
 
 def instruction_finetune(model, device, dataloader, batch_size, learning_rate, epoch):
-    finetune_steps = dataloader.training_data_size() / batch_size * epoch
+    finetune_steps = dataloader.training_data_size() // batch_size * epoch
     print(f"Finetuning steps: {finetune_steps}")
 
     # smaller weight decay as we are doing finetuning
@@ -236,32 +236,25 @@ def instruction_finetune(model, device, dataloader, batch_size, learning_rate, e
     return model
 
 
-def strip_state_prefix(state_dict, prefix="_orig_mod.module."):
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if k.startswith(prefix):
-            new_key = k[len(prefix):]
-        else:
-            new_key = k
-        new_state_dict[new_key] = v
-    return new_state_dict
-
-
 
 def training_loop():
-    batch_size = 512
-    learning_rate = 5e-5
+    sft_data_file = "./finetune_data/alpaca.parquet"
+    model_file = "./model/pretrain_0616.pth"
+    model_dir = "model"
+
+    batch_size = 128
+    learning_rate = 1e-5
     epoch = 2
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    dataloader = DataLoadeFinetune()
+    dataloader = DataLoadeFinetune(sft_data_file)
     print(f"total training data: {dataloader.training_data_size()}")
 
     config = GPTConfig(vocab_size=50304)
     model = GPT(config)
 
     # Load the state dict from the saved file
-    state_dict = torch.load(MODEL_FILE, map_location=torch.device('cpu'))
+    state_dict = torch.load(model_file, map_location=torch.device('cpu'))
     model.load_state_dict(strip_state_prefix(state_dict))
     
     model = model.to(device)
@@ -269,7 +262,7 @@ def training_loop():
     model = torch.compile(model)
 
     # instrunction finetuning
-    instruction_finetune(
+    model = instruction_finetune(
         model, 
         device,
         dataloader,
@@ -277,6 +270,8 @@ def training_loop():
         learning_rate, 
         epoch
     )
+
+    torch.save(model.state_dict(), os.path.join(model_dir, f"model_finetune.pth"))
 
 
 if __name__ == "__main__":
