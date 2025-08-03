@@ -37,19 +37,21 @@ class RewardModel(torch.nn.Module):
         self.gpt_model = gpt_model
         self.linear_head = torch.nn.Linear(gpt_model.config.n_embd, 1)
     
-    def forward(self, prefered, unprefered, mask, last_token=True):
+    def forward(self, idx, mask, last_token=True):
         B, T = idx.size()
         assert mask.shape == idx.shape
 
-        # this is a batch
+        # this is a batch, mask the output to align with each sequence's actual length
         output, _ = self.gpt_model(idx, skip_lm_head=True)
         masked_output = output * mask
 
         if last_token:
+            # if lask_token is True, we pick the last token's embedding as reward input
             last_indexes = mask.sum(dim=1) - 1
             tokens = masked_output[torch.arange(B),last_indexes,:]
             return self.linear_head(tokens)
         else:
+            # take the average of all the embeddings as reward input
             average = masked_output.sum(dim=1) / mask.sum(dim=1)
             return self.linear_head(average)
 
@@ -99,6 +101,3 @@ def reward_model_training():
         
         loss.backward()
         optimizer.step()
-    
-
-
