@@ -4,7 +4,7 @@ from model import GPT, GPTConfig
 from util import strip_state_prefix
 import tiktoken
 
-MODEL_FILE = "./model/pretrain.pth"
+MODEL_FILE = "./model/pretrain_0616.pth"
 
 def generate(model, input_ids, attention_masks, temperature, steps):
 

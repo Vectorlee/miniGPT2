@@ -129,7 +129,7 @@ class GPT(nn.Module):
             #torch.nn.init.xavier_normal_(module.weight)
 
 
-    def forward(self, idx, targets=None):
+    def forward(self, idx, targets=None, skip_lm_head=False):
 
         B, T = idx.size() # shape (B, T)
         assert T <= self.config.block_size
@@ -149,6 +149,11 @@ class GPT(nn.Module):
         # the final layer norm
         x = self.transformer.ln_f(x)
 
+        # skip the final unembedding layer if specified
+        if skip_lm_head:
+            return x, None
+
+        # get the vocab logits
         logits = self.lm_head(x)
         loss = None
         if targets is not None:

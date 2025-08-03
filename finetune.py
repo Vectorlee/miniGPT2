@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 import tiktoken
 import torch
 import torch.nn.functional as F
@@ -242,7 +241,7 @@ def training_loop():
     model_file = "./model/pretrain_0616.pth"
     model_dir = "model"
 
-    batch_size = 128
+    batch_size = 64
     learning_rate = 1e-5
     epoch = 2
     device = 'cuda' if torch.cuda.is_available() else 'cpu'

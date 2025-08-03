@@ -5,3 +5,5 @@ pretrain_data/*
 !pretrain_data/*.py
 finetune_data/*
 !finetune_data/*.py
+rlhf_data/*
+!rlhf_data/*.py
