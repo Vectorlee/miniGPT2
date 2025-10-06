@@ -1,69 +1,70 @@
-import torch
 from torch.nn import functional as F
+from torch.nn.utils.rnn import pad_sequence
 from model import GPT, GPTConfig
 from util import strip_state_prefix
 import tiktoken
+import torch
+import random
+
+random.seed(1337)
+torch.manual_seed(1337)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(1337)
+
+#initilize tokenizer
+enc = tiktoken.get_encoding("gpt2")
+eot = enc._special_tokens['<|endoftext|>']
 
 MODEL_FILE = "./model/pretrain_0616.pth"
 
-def generate(model, input_ids, attention_masks, temperature, steps):
-
-    for s in range(steps):
-        # input_ids: B, T
-        B, T = input_ids.shape
-        # logits: [B, T, vocab_size]
-        logits, _ = model(input_ids)
-        #print(logits.shape)
-
-        # attention_masks: B, T, sum the value to get the length of each sequence
-        input_lengths = torch.sum(attention_masks, dim=1, dtype=torch.int64)
-        #print(input_lengths)
+def generate(model, input_ids, attention_masks, temperature, max_steps):
+    B, T = input_ids.shape
+    finish_mask = torch.zeros(B, dtype=torch.int64, device=input_ids.device)
+    
+    for _ in range(max_steps):
+        logits, _ = model(input_ids)   # [B, T, vocab_size]
+        last_logit_indexes = attention_masks.sum(dim=1) - 1  # [B, ]
+        last_logit = logits[torch.arange(B, device=input_ids.device), last_logit_indexes]
 
         # expend the length of input tensors
-        input_ids = torch.concat((input_ids, torch.zeros(B, 1, dtype=torch.int64)), dim=1)
-        attention_masks = torch.concat((attention_masks, torch.zeros(B, 1, dtype=torch.int64)), dim=1)
+        pad_tensor = torch.zeros(B, 1, dtype=torch.int64, device=input_ids.device)
+        input_ids = torch.cat((input_ids, pad_tensor), dim = 1)
+        attention_masks = torch.cat((attention_masks, pad_tensor), dim = 1)
 
-        for i in range(B):
-            seq_size = input_lengths[i].item()
-            last_logit = logits[i][seq_size - 1]
+        next_tokens = torch.tensor([])
+        if temperature == 0:
+            # just pick the most likely token
+            next_tokens = torch.argmax(last_logit, dim=1)
+        else:
+            # apply the temperature then do softmax
+            probs = F.softmax(last_logit / temperature, dim=1)
+            next_tokens = torch.multinomial(probs, num_samples=1).squeeze()
+        
+        # assign the next token and attention mask
+        input_ids[torch.arange(B, device=input_ids.device), last_logit_indexes + 1] = next_tokens
+        attention_masks[torch.arange(B, device=input_ids.device), last_logit_indexes + 1] = 1
 
-            if temperature == 0:
-                # in this case we just pick the most likely token
-                ans = torch.max(last_logit, dim=0)
-                token = ans.indices
-                # append the last token to the input sequence
-                input_ids[i][seq_size] = token
-            else:
-                # apply the temperature
-                last_logit = last_logit / temperature
-                probs = F.softmax(last_logit, dim=0)
-                token = torch.multinomial(probs, num_samples=1).item()
-                input_ids[i][seq_size] = token
+        # if we hit the endoftext token, mark it in the finish_mask 
+        idx = torch.nonzero(next_tokens == eot, as_tuple=False).squeeze()
+        finish_mask[idx] = 1
+        if finish_mask.sum() == B:
+            break
 
-            # append the attention mask to the last position
-            attention_masks[i][seq_size] = 1 
-    
-    #print(input_ids)
-    #print(attention_masks)
     return input_ids, attention_masks
 
 
-def get_padding_batch_tensor(token_batch):
-
-    max_length = max(map(lambda s: len(s), token_batch))
-    input_ids = []
-    attention_masks = []
+def get_padding_batch_input(token_batch):
+    input_list = []
+    mask_list = []
 
     for tokens in token_batch:
-        padded_tokens = tokens + [0] * (max_length - len(tokens))
-        padded_masks = [1] * len(tokens) + [0] * (max_length - len(tokens))
-
-        input_ids.append(padded_tokens)
-        attention_masks.append(padded_masks)
+        input_list.append(torch.tensor(tokens, dtype=torch.int64))
+        mask_list.append(torch.ones(len(tokens), dtype=torch.int64))
     
-    return \
-        torch.tensor(input_ids, dtype=torch.int64), \
-        torch.tensor(attention_masks, dtype=torch.int64)
+    input_ids = pad_sequence(input_list, batch_first=True)
+    attention_masks = pad_sequence(mask_list, batch_first=True)
+    
+    return input_ids, attention_masks
 
 
 
@@ -82,12 +83,10 @@ if __name__ == "__main__":
     token_seq1 = enc.encode_ordinary(input_str1)
     token_seq2 = enc.encode_ordinary(input_str2)
     
-    input_ids, attention_masks = get_padding_batch_tensor([token_seq1, token_seq2])
-    print(input_ids)
-    print(attention_masks)
+    input_ids, attention_masks = get_padding_batch_input([token_seq1, token_seq2])
 
     with torch.no_grad():
-        input_ids, attention_masks = generate(model, input_ids, attention_masks, 0.8, 10)
+        input_ids, attention_masks = generate(model, input_ids, attention_masks, 0.8, 100)
         for i in range(input_ids.shape[0]):
             print(enc.decode(input_ids[i].tolist()))
 
