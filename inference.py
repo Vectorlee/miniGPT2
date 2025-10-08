@@ -53,6 +53,19 @@ def generate(model, input_ids, attention_masks, temperature, max_steps):
     return input_ids, attention_masks
 
 
+def decode_generation(input_ids):
+    B, T = input_ids.shape
+    answer_list = []
+
+    for i in range(B):
+        sequence = input_ids[i].tolist()
+        index = sequence.index(eot) if eot in sequence else len(sequence)
+        sequence = sequence[:index]
+        answer_list.append(enc.decode(sequence))
+
+    return answer_list
+
+
 def get_padding_batch_input(token_batch):
     input_list = []
     mask_list = []
@@ -77,8 +90,8 @@ if __name__ == "__main__":
     model.load_state_dict(strip_state_prefix(state_dict))
     model.eval()
 
-    input_str1 = "What is your favorite"
-    input_str2 = "It is a sunny day here in Seattle"
+    input_str1 = "I plan to visit Seattle next month, what are the places I can go?"
+    input_str2 = "Help me write a short story about a young girl trying to establish herself in a new company."
     enc = tiktoken.get_encoding("gpt2")
     token_seq1 = enc.encode_ordinary(input_str1)
     token_seq2 = enc.encode_ordinary(input_str2)
@@ -87,9 +100,9 @@ if __name__ == "__main__":
 
     with torch.no_grad():
         input_ids, attention_masks = generate(model, input_ids, attention_masks, 0.8, 100)
-        for i in range(input_ids.shape[0]):
-            print(enc.decode(input_ids[i].tolist()))
-
+        answer_list = decode_generation(input_ids)
+        for answer in answer_list:
+            print(answer)
 
 
 
