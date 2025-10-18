@@ -38,14 +38,14 @@ def generate(model, input_ids, attention_masks, temperature, max_steps):
         else:
             # apply the temperature then do softmax
             probs = F.softmax(last_logit / temperature, dim=1)
-            next_tokens = torch.multinomial(probs, num_samples=1).squeeze()
+            next_tokens = torch.multinomial(probs, num_samples=1).squeeze(-1)
         
         # assign the next token and attention mask
         input_ids[torch.arange(B, device=input_ids.device), last_logit_indexes + 1] = next_tokens
         attention_masks[torch.arange(B, device=input_ids.device), last_logit_indexes + 1] = 1
 
         # if we hit the endoftext token, mark it in the finish_mask 
-        idx = torch.nonzero(next_tokens == eot, as_tuple=False).squeeze()
+        idx = torch.nonzero(next_tokens == eot, as_tuple=False).squeeze(-1)
         finish_mask[idx] = 1
         if finish_mask.sum() == B:
             break
