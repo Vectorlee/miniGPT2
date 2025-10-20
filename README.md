@@ -54,33 +54,36 @@ Code files:
     |___finetune_data/
         |___aplaca_downaloder.py    # downloader of the finetune data
 
-We used the Stanford [Alpaca](https://huggingface.co/datasets/tatsu-lab/alpaca) dataset, a 52K question-answer pair, to fine-tune our pretrained GPT model, and train the model for 2 epoch. We implemented the finetuning logic from scratch and write our own loss calculation logic.
+We used the Stanford [Alpaca](https://huggingface.co/datasets/tatsu-lab/alpaca) dataset, a 52K question-answer pair, to fine-tune our pretrained GPT model, and train the model for 2 epoch. We implemented the finetuning loop and loss calculation logic all from scratch.
 
 After finetuning, our small GPT model will act like a chatbot
 
 Before finetune:
 
-    prompt:     What are the places I can visit in New York?
-    response:   The most popular locations are the South Side Pier, the Highlevard and the Manhattan Bridge: New York.
-    How many places in New York are there?
-    The New York City area has a population of 591,974. New York is the largest city in New York.
-    What is New York City in terms of population?
-    New York City ...       [keep generating]
+```python
+prompt:     "What are the places I can visit in New York?"
+response:   "The most popular locations are the South Side Pier, the Highlevard and the Manhattan Bridge: New York.
+How many places in New York are there?
+The New York City area has a population of 591,974. New York is the largest city in New York.
+What is New York City in terms of population?
+New York City ..."      #  [keep generating]
 
-    prompt:     Who is the first president of the United States?
-    response:   The U.S. Constitution was written by Thomas Jefferson in 1790. The primary purpose of the Constitution was to secure the independence of the people.
-    What are the 4 types of government?
-    In its most basic form ...      [keep generating]
+prompt:     "Who is the first president of the United States?"
+response:   "The U.S. Constitution was written by Thomas Jefferson in 1790. The primary purpose of the Constitution was to secure the independence of the people.
+What are the 4 types of government?
+In its most basic form ..."     #  [keep generating]
+```
 
 After finetune:
 
-    prompt:     What are the places I can visit in New York?
-    response:   The most popular locations to visit in New York     
-    include the Empire State Building, the White House, the Statue of Liberty, and iconic New York skyline landmarks like the Crocker Bridge, the Empire State Building, and the Central Park.
+```python
+prompt:     "What are the places I can visit in New York?"
+response:   "The most popular locations to visit in New York include the Empire State Building, the White House, the Statue of Liberty, and iconic New York skyline landmarks like the Crocker Bridge, the Empire State Building, and the Central Park."
 
 
-    prompt:     Who is the first president of the United States?
-    response:   The first president of the United States was George Washington.
+prompt:     "Who is the first president of the United States?"
+response:   "The first president of the United States was George Washington."
+```
 
 The model will generate response for the question and generate "<|endoftext|>" token timely.
 
@@ -100,13 +103,28 @@ def generate(
     input_ids,          # the input token batch, pytorch tensor, shape: [B, T]
     attention_masks,    # the input mask, pytorch tensor, shape: [B, T] 
     temperature,        # generation temperature
-    max_steps):         # maximum generation steps
+    max_steps           # maximum generation steps
+)         
 ```
 
 The `input_ids` is a batch of token list representing the prompts, short prompts will be padded with 0. `attention_masks` is the input mask, with the same shape as the input_ids, and will assign 1 if the corresponding index has real token, and 0 for the padding token. You can get them by calling the `tokenize_batch_input` function with a list of prompt strings. 
 
+Example:
+```
+input_ids:  [
+    [134, 567, 34, 11, 34],
+    [89, 32, 22, 0, 0]
+]
+
+attention_masks:  [
+    [1, 1, 1, 1, 1],
+    [1, 1, 1, 0, 0]
+]
+```
+
 The `generate` function will invoke the forward pass of the model in the auto-regressive fashion, and sample the next token randomly, scaled by the `temperature` parameter. The generate function will keep invoking the model until we hit the '<|endoftext|>' token for all input prompts, or if we reach the `max_steps`. 
 
+Since our model is small, you can run this inference directly on CPU.
 
 ### RLHF
 
