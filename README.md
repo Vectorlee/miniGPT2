@@ -62,15 +62,15 @@ Before finetune:
 
 ```python
 prompt:     "What are the places I can visit in New York?"
-response:   "The most popular locations are the South Side Pier, the Highlevard and the Manhattan Bridge: New York.
-How many places in New York are there?
-The New York City area has a population of 591,974. New York is the largest city in New York.
-What is New York City in terms of population?
+response:   "The most popular locations are the South Side Pier, the Highlevard and the Manhattan Bridge: New York.\
+How many places in New York are there? \
+The New York City area has a population of 591,974. New York is the largest city in New York. \
+What is New York City in terms of population? \
 New York City ..."      #  [keep generating]
 
 prompt:     "Who is the first president of the United States?"
-response:   "The U.S. Constitution was written by Thomas Jefferson in 1790. The primary purpose of the Constitution was to secure the independence of the people.
-What are the 4 types of government?
+response:   "The U.S. Constitution was written by Thomas Jefferson in 1790. The primary purpose of the Constitution was to secure the independence of the people. \
+What are the 4 types of government? \
 In its most basic form ..."     #  [keep generating]
 ```
 
@@ -78,8 +78,10 @@ After finetune:
 
 ```python
 prompt:     "What are the places I can visit in New York?"
-response:   "The most popular locations to visit in New York include the Empire State Building, the White House, the Statue of Liberty, and iconic New York skyline landmarks like the Crocker Bridge, the Empire State Building, and the Central Park."
-
+response:   "The most popular locations to visit in New York include the Empire \
+State Building, the White House, the Statue of Liberty, and iconic New York \
+skyline landmarks like the Crocker Bridge, the Empire State Building, and the \
+Central Park."
 
 prompt:     "Who is the first president of the United States?"
 response:   "The first president of the United States was George Washington."
