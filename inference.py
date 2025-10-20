@@ -15,7 +15,7 @@ if torch.cuda.is_available():
 enc = tiktoken.get_encoding("gpt2")
 eot = enc._special_tokens['<|endoftext|>']
 
-MODEL_FILE = "./model/pretrain_0616.pth"
+MODEL_FILE = "./model/model_finetune.pth"
 
 def generate(model, input_ids, attention_masks, temperature, max_steps):
     B, T = input_ids.shape
@@ -66,19 +66,20 @@ def decode_generation(input_ids):
     return answer_list
 
 
-def get_padding_batch_input(token_batch):
+def tokenize_batch_input(prompt_list):
+    enc = tiktoken.get_encoding("gpt2")
+
     input_list = []
     mask_list = []
-
-    for tokens in token_batch:
+    for prompt in prompt_list:
+        tokens = enc.encode_ordinary(prompt)
         input_list.append(torch.tensor(tokens, dtype=torch.int64))
         mask_list.append(torch.ones(len(tokens), dtype=torch.int64))
-    
+
     input_ids = pad_sequence(input_list, batch_first=True)
     attention_masks = pad_sequence(mask_list, batch_first=True)
     
     return input_ids, attention_masks
-
 
 
 if __name__ == "__main__":
@@ -90,13 +91,10 @@ if __name__ == "__main__":
     model.load_state_dict(strip_state_prefix(state_dict))
     model.eval()
 
-    input_str1 = "I plan to visit Seattle next month, what are the places I can go?"
-    input_str2 = "Help me write a short story about a young girl trying to establish herself in a new company."
-    enc = tiktoken.get_encoding("gpt2")
-    token_seq1 = enc.encode_ordinary(input_str1)
-    token_seq2 = enc.encode_ordinary(input_str2)
+    prompt1 = "What are the places I can visit in New York?"
+    prompt2 = "Who is the first president of the United States?" 
     
-    input_ids, attention_masks = get_padding_batch_input([token_seq1, token_seq2])
+    input_ids, attention_masks = tokenize_batch_input([prompt1, prompt2])
 
     with torch.no_grad():
         input_ids, attention_masks = generate(model, input_ids, attention_masks, 0.8, 100)

@@ -275,7 +275,7 @@ for step in range(train_param.max_steps):
     norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
     # set the cosine decay learing rate
-    lr = get_lr(step)
+    lr = get_lr(step, train_param)
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
