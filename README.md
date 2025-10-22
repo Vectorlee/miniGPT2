@@ -40,7 +40,7 @@ The training config:
 
 You can adjust the GPU count and micro batch size, the gradient accumulation step will be computed in the code. Just make sure you don't get CUDA out of memory error :)
 
-We trained the model with one epoch, with linear warmup and cosine decay, and get the following loss graph:
+During pretraining, we saturate the sequence length with 1024 tokens for every sequence. We trained the model with one epoch, with linear warmup and cosine decay, and get the following loss graph:
 
 ![Pre-Training Loss](./image/pretrain_loss.png)
 
@@ -54,7 +54,18 @@ Code files:
     |___finetune_data/
         |___aplaca_downaloder.py    # downloader of the finetune data
 
-We used the Stanford [Alpaca](https://huggingface.co/datasets/tatsu-lab/alpaca) dataset, a 52K question-answer pair, to fine-tune our pretrained GPT model, and train the model for 2 epoch. We implemented the finetuning loop and loss calculation logic all from scratch.
+We used the Stanford [Alpaca](https://huggingface.co/datasets/tatsu-lab/alpaca) dataset, a 52K question-answer pair, to fine-tune our pretrained GPT model, and train the model for 2 epoch. 
+
+During pre-training, we saturate our context window by using 1024 tokens per sequence for every sequence. In finetuning, however, each question-answer pair has different lengths, and to form a batch, we will use a padding tokens 0 at the end of the shorter sequences. We concatenate the question and answer to form one input sequence, and for its target, we left shift the original sequence by 1, and mask all parts except the answer tokens with -100. So the data looks like this:
+
+```
+input:  <question tokens><answer tokens><0, 0, 0>
+target: <-100, -100, -100><answer tokens><-100, -100, -100>
+```
+Setting the target to -100 will instruct the pytorch cross entropy function to ignore this index when calculating the loss. Therefore we only train the model to generate the correct answer given the question. Below is the loss graph:
+
+![Finetune Loss](./image/finetune_loss.png)
+
 
 After finetuning, our small GPT model will act like a chatbot
 
@@ -97,7 +108,7 @@ Code files:
     root
     |___inference.py        # the inference code
 
-The mean inference funciton is the `generate` function in the file, we loosely follow the huggingface API design, with the generate function defined as:
+The main inference funciton is the `generate` function in the file, we loosely follow the huggingface API design, with the generate function defined as:
 
 ```python
 def generate(
